@@ -1,0 +1,69 @@
+#!/bin/bash
+#
+# barsplit :: split a large scanned PDF into units of X pages
+#             and name each unit based on a barcode found on the
+#             first page of that unit
+#
+# Original purpose: to permit student work to be returned by processing
+# a scan of that work, with barcode sheets inserted at the start of each
+# student's information.
+#
+# Dependencies:
+#	Binary			Package name (Fedora)
+#	zbarimg			zbar
+#	pdfseparate		poppler-utils
+#	pdftoppm		poppler-utils
+#
+
+# Number of pages per split unit
+P="$(tr -cd "[0-9]" <<<$1)"
+
+# Input filename
+I="$2"
+
+# Check arguments
+if [ $# -ne 2 ] || [ "${P}" -lt 1 ] || [ ! -f "$I" ]
+then
+	echo "$(basename $0): Utility to split a PDF based on barcodes." >&2
+	echo "Output is in output/BARCODE.pdf" >&2
+	echo "Usage: $(basename $0) pages_per_group input_file.pdf" >&2
+	exit 1
+fi
+
+# Split the input file into separate PDF pages
+rm -rf split output
+mkdir -p split output
+pdfseparate "${I}" split/image-%d.pdf
+
+# Find barcodes
+cd split
+
+PG=1
+while [ -f image-${PG}.pdf ]
+do
+	BARCODE=$(zbarimg --raw image-${PG}.pdf 2>/dev/null)
+	if [ $? -ne 0 ]
+	then
+		echo "Failure; barcode not found." >&2
+		exit 2
+	fi
+	BARCODE=$(tr -cd [0-9] <<<$BARCODE)
+
+	MERGE_ARGS=""
+	for ((X=PG; X<P+PG; X++))
+	do
+		MERGE_ARGS="${MERGE_ARGS} image-${X}.pdf"
+	done
+	if pdfmerge ${MERGE_ARGS} ../output/${BARCODE}.pdf >&/dev/null
+	then
+		:
+	else
+		echo "pdfmerge failed: result code $?" >&2
+		exit 3
+	fi
+
+	((PG+=P))
+done
+
+
+

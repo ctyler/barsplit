@@ -30,6 +30,9 @@ then
 	exit 1
 fi
 
+echo "P: $P"
+echo "I: $I"
+
 # Split the input file into separate PDF pages
 rm -rf split output
 mkdir -p split output
@@ -41,27 +44,38 @@ cd split
 PG=1
 while [ -f image-${PG}.pdf ]
 do
+
+	echo "Processing image-${PG}.pdf"
+
 	BARCODE=$(zbarimg --raw image-${PG}.pdf 2>/dev/null)
 	if [ $? -ne 0 ]
 	then
-		echo "Failure; barcode not found." >&2
+		echo "Failure; barcode not found in 'image-${PG}.pdf'." >&2
 		exit 2
 	fi
-	BARCODE=$(tr -cd [0-9] <<<$BARCODE)
+	BARCODE=$(cut -d: -f2 <<<$BARCODE)
+	echo "BARCODE: ${BARCODE}"
 
-	MERGE_ARGS=""
-	for ((X=PG; X<P+PG; X++))
-	do
-		MERGE_ARGS="${MERGE_ARGS} image-${X}.pdf"
-	done
-	if pdfmerge ${MERGE_ARGS} ../output/${BARCODE}.pdf >&/dev/null
+	if [ "${P}" -eq 1 ]
 	then
-		:
-	else
-		echo "pdfmerge failed: result code $?" >&2
-		exit 3
-	fi
 
+		cp "image-${PG}.pdf" "../output/${BARCODE}.pdf" >&/dev/null
+
+	else
+
+		MERGE_ARGS=""
+		for ((X=PG; X<P+PG; X++))
+		do
+			MERGE_ARGS="${MERGE_ARGS} image-${X}.pdf"
+		done
+		if pdfmerge ${MERGE_ARGS} ../output/${BARCODE}.pdf >&/dev/null
+		then
+			:
+		else
+			echo "pdfmerge failed: result code $?" >&2
+			exit 3
+		fi
+	fi
 	((PG+=P))
 done
 

@@ -1,6 +1,6 @@
 #!/bin/bash
 #
-# barsplit :: split a large scanned PDF into units of X pages
+# barplit :: split a large scanned PDF into units of X pages
 #             and name each unit based on a barcode found on the
 #             first page of that unit
 #
@@ -34,12 +34,12 @@ echo "P: $P"
 echo "I: $I"
 
 # Split the input file into separate PDF pages
-rm -rf split output
-mkdir -p split output
-pdfseparate "${I}" split/image-%d.pdf
+rm -rf barsplit
+mkdir -p barsplit/{split,output/named,output/sequence}
+pdfseparate "${I}" barsplit/split/image-%d.pdf
 
 # Find barcodes
-cd split
+cd barsplit/split
 
 PG=1
 while [ -f image-${PG}.pdf ]
@@ -51,33 +51,41 @@ do
 	if [ $? -ne 0 ]
 	then
 		echo "Failure; barcode not found in 'image-${PG}.pdf'." >&2
-		exit 2
-	fi
-	BARCODE=$(cut -d: -f2 <<<$BARCODE)
-	echo "BARCODE: ${BARCODE}"
-
-	if [ "${P}" -eq 1 ]
-	then
-
-		cp "image-${PG}.pdf" "../output/${BARCODE}.pdf" >&/dev/null
-
 	else
+		RAW="${BARCODE}"
+		BARCODE="$(cut -d: -f2 <<<$RAW)"
+		SEQ="$(printf "%03d" "$(cut -d: -f1 <<<$RAW)")"
+		echo "RAW:     ${RAW}"
+		echo "BARCODE: ${BARCODE}"
+		echo "SEQ:     ${SEQ}"
 
-		MERGE_ARGS=""
-		for ((X=PG; X<P+PG; X++))
-		do
-			MERGE_ARGS="${MERGE_ARGS} image-${X}.pdf"
-		done
-		if pdfmerge ${MERGE_ARGS} ../output/${BARCODE}.pdf >&/dev/null
+		if [ "${P}" -eq 1 ]
 		then
-			:
+	
+			mv "image-${PG}.pdf" "../output/named/${BARCODE}.pdf" 
+	
 		else
-			echo "pdfmerge failed: result code $?" >&2
-			exit 3
+	
+			MERGE_ARGS=""
+			for ((X=PG; X<P+PG; X++))
+			do
+				MERGE_ARGS="${MERGE_ARGS} image-${X}.pdf"
+			done
+			if pdfmerge ${MERGE_ARGS} ../output/named/${BARCODE}.pdf >&/dev/null
+			then
+				:
+			else
+				echo "pdfmerge failed: result code $?" >&2
+				exit 3
+			fi
 		fi
+
+		if [ "$SEQ" != "" ]
+		then
+			cp "../output/named/${BARCODE}.pdf" "../output/sequence/${SEQ}.pdf" 
+		fi
+
 	fi
 	((PG+=P))
 done
-
-
 
